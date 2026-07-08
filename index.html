@@ -385,25 +385,7 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
       </div>
       <div class="add-field">
         <label>Colour family</label>
-        <select id="add-colour">
-          <option value="white">White / Off-white</option>
-          <option value="black">Black</option>
-          <option value="navy">Navy</option>
-          <option value="indigo">Indigo / Dark blue</option>
-          <option value="cobalt">Cobalt / Bright blue</option>
-          <option value="light-blue">Light blue</option>
-          <option value="grey">Grey</option>
-          <option value="beige">Beige / Cream</option>
-          <option value="brown">Brown / Tan</option>
-          <option value="olive">Olive / Khaki</option>
-          <option value="forest">Forest green</option>
-          <option value="sage">Sage green</option>
-          <option value="pink">Pink / Dusty rose</option>
-          <option value="salmon">Salmon / Peach</option>
-          <option value="orange">Orange</option>
-          <option value="maroon">Maroon / Burgundy</option>
-          <option value="multi">Multicolour / Print</option>
-        </select>
+        <input type="text" id="add-colour" placeholder="e.g. cobalt blue, forest green, off-white">
       </div>
       <div class="add-field">
         <label>Notes (optional)</label>
@@ -762,7 +744,7 @@ Respond ONLY with valid JSON, no markdown, no explanation:
 {"type":"tee","label":"Black oversized tee (Easy Buy)","colour":"black","notes":"Heavy cotton, oversized fit. Wear untucked with jeans or cargo pants."}
 
 type must be one of: tee, polo, shirt, sweater, pants, shorts, shoes, watch, sunglasses, socks, accessory
-colour must be one of: white, black, navy, indigo, cobalt, light-blue, grey, beige, brown, olive, forest, sage, pink, salmon, orange, maroon, multi
+colour should be a short descriptive colour name e.g. cobalt blue, forest green, off-white, tan, dusty pink
 label should include brand if visible and a short description
 notes should be 1-2 sentences on fit and how to style it`;
 
@@ -784,6 +766,12 @@ notes should be 1-2 sentences on fit and how to style it`;
         ]}]
       })
     });
+    if (!res.ok) {
+      const errBody = await res.text();
+      box.innerHTML = '⚠️ API error ' + res.status + ' — ' + errBody.slice(0, 300);
+      document.getElementById('add-form-wrap').classList.add('on');
+      return;
+    }
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
     const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g,'').trim();
@@ -793,9 +781,7 @@ notes should be 1-2 sentences on fit and how to style it`;
     const typeEl = document.getElementById('add-type');
     const validTypes = ['tee','polo','shirt','sweater','pants','shorts','shoes','watch','sunglasses','socks','accessory'];
     if (validTypes.includes(p.type)) typeEl.value = p.type;
-    const colourEl = document.getElementById('add-colour');
-    const validColours = ['white','black','navy','indigo','cobalt','light-blue','grey','beige','brown','olive','forest','sage','pink','salmon','orange','maroon','multi'];
-    if (validColours.includes(p.colour)) colourEl.value = p.colour;
+    document.getElementById('add-colour').value = p.colour || '';
     document.getElementById('add-notes').value = p.notes || '';
     box.innerHTML = '<strong style="color:#f2f2f3">Identified:</strong> ' + (p.label||'') +
       ' <span style="color:#8a8a90">(' + (p.type||'') + ' · ' + (p.colour||'') + ')</span>' +
