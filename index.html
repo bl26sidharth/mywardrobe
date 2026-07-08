@@ -331,9 +331,9 @@ section.view.active{display:block;animation:fadeIn 0.4s ease}
   </div>
 
   <!-- Upload zone: display:none input + label is the only reliable iOS pattern -->
-  <div id="add-upload-prompt-wrap">
+  <div id="add-upload-prompt-wrap" style="position:relative;z-index:1001">
     <input type="file" id="add-file-input" accept="image/*" style="display:none">
-    <label for="add-file-input" class="add-upload-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:160px">
+    <label for="add-file-input" class="add-upload-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:160px;position:relative;z-index:1001">
       <div style="font-size:2.5rem;margin-bottom:0.75rem">📷</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-mute)">Tap to choose photo</div>
       <div style="font-size:0.75rem;color:var(--ink-mute);margin-top:0.4rem;opacity:0.6">camera or library</div>
