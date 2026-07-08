@@ -749,13 +749,10 @@ label should include brand if visible and a short description
 notes should be 1-2 sentences on fit and how to style it`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://wardrobe-proxy.vercel.app/api/claude', {
       method: 'POST',
       headers: {
           'Content-Type': 'application/json',
-          'x-api-key': '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',
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
         },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
@@ -864,13 +861,10 @@ Respond ONLY with valid JSON, no markdown:
 {"outfits":[{"title":"Short name","top":"exact_id","bottom":"exact_id","shoes":"exact_id","vibes":["everyday"],"occasion":"class / coffee","notes":"One sentence.","score":8.2}]}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://wardrobe-proxy.vercel.app/api/claude', {
       method: 'POST',
       headers: {
           'Content-Type': 'application/json',
-          'x-api-key': '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',
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
         },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
