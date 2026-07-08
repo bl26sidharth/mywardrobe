@@ -332,10 +332,21 @@ section.view.active{display:block;animation:fadeIn 0.4s ease}
 
   <!-- Upload zone -->
   <div class="add-upload-zone" id="add-upload-zone">
-    <input type="file" id="add-file-input" accept="image/*" capture="environment">
+    <input type="file" id="add-file-input" accept="image/*">
     <div id="add-upload-prompt">
       <div style="font-size:2rem;margin-bottom:0.75rem">📷</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-mute)">Tap to upload or take photo</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-mute);margin-bottom:1.25rem">Tap to choose photo</div>
+      <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
+        <button onclick="event.stopPropagation();document.getElementById('add-file-input').click()" 
+          style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;padding:0.65rem 1.25rem;background:var(--ink);color:var(--bg);border:none;border-radius:8px;cursor:pointer">
+          Choose Photo
+        </button>
+        <button onclick="event.stopPropagation();document.getElementById('add-camera-input').click()" 
+          style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;padding:0.65rem 1.25rem;background:transparent;color:var(--ink-soft);border:1px solid var(--line);border-radius:8px;cursor:pointer">
+          Take Photo
+        </button>
+      </div>
+      <input type="file" id="add-camera-input" accept="image/*" capture="environment" style="display:none">
     </div>
   </div>
 
@@ -726,6 +737,13 @@ let addState = {
   fileInput.addEventListener('change', e => {
     if (e.target.files[0]) handleFile(e.target.files[0]);
   });
+  // Also wire the separate camera input
+  const cameraInput = document.getElementById('add-camera-input');
+  if (cameraInput) {
+    cameraInput.addEventListener('change', e => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+  }
 })();
 
 function handleFile(file) {
@@ -977,6 +995,8 @@ function resetAddView() {
   document.getElementById('add-outfits-section').classList.remove('visible');
   document.getElementById('add-success').classList.remove('visible');
   document.getElementById('add-file-input').value = '';
+  const cam = document.getElementById('add-camera-input');
+  if (cam) cam.value = '';
   document.getElementById('add-label').value = '';
   document.getElementById('add-notes').value = '';
 }
