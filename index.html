@@ -42,7 +42,7 @@ body::before{
 .tab:hover{background:var(--hover);color:var(--ink)}
 .tab.active{background:var(--ink);color:var(--paper)}
 section.view{display:none;padding:2rem;max-width:1700px;margin:0 auto}
-section.view.active{display:block;animation:fadeIn 0.4s ease}
+section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .page-head{margin-bottom:1.5rem;border-bottom:1px solid var(--line);padding-bottom:1.2rem}
 .page-meta{font-family:'JetBrains Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.18em;color:var(--ink-mute);margin-bottom:0.4rem}
@@ -343,6 +343,10 @@ section.view.active{display:block;animation:fadeIn 0.4s ease}
     </ul>
   </div>
 
+
+
+</section>
+
 <section class="view" id="view-add">
   <div class="page-head">
     <div class="page-meta">// Expand</div>
@@ -359,8 +363,6 @@ section.view.active{display:block;animation:fadeIn 0.4s ease}
 
   <img id="add-preview" style="width:100%;border-radius:10px;display:none;margin-bottom:1rem">
   <p id="add-status" style="color:#8a8a90;font-size:0.85rem"></p>
-</section>
-
 </section>
 
 <div class="modal" id="modal" onclick="this.classList.remove('open')">
