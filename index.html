@@ -354,6 +354,16 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
     <p class="page-tagline">Photo → Claude identifies it → outfits generated instantly.</p>
   </div>
   <div class="add-wrap">
+    <!-- API key (stored in sessionStorage, never sent anywhere except Anthropic) -->
+    <div id="add-key-wrap" style="margin-bottom:1.25rem">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.12em;color:#8a8a90;margin-bottom:0.5rem">Anthropic API Key</div>
+      <div style="display:flex;gap:0.5rem">
+        <input type="password" id="add-api-key" placeholder="sk-ant-..." 
+          style="flex:1;background:#161618;border:1px solid #ffffff14;border-radius:8px;padding:0.75rem 1rem;color:#f2f2f3;font-family:monospace;font-size:0.8rem;outline:none">
+        <button onclick="saveApiKey()" style="padding:0.75rem 1rem;background:#f2f2f3;color:#0e0e10;border:none;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;text-transform:uppercase;cursor:pointer">Save</button>
+      </div>
+      <div id="add-key-status" style="font-size:0.75rem;color:#8a8a90;margin-top:0.4rem"></div>
+    </div>
     <input type="file" id="add-file-input" accept="image/*" style="display:none">
     <label for="add-file-input" id="add-label-btn" class="add-label-btn">
       <span class="icon">📷</span>
@@ -716,6 +726,27 @@ $('#reset-filters').addEventListener('click', () => {
 // ============================================================
 // ADD ITEM FEATURE
 // ============================================================
+
+function saveApiKey() {
+  const key = document.getElementById('add-api-key').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('add-key-status').textContent = '⚠️ Key should start with sk-ant-';
+    return;
+  }
+  sessionStorage.setItem('anthropic_key', key);
+  document.getElementById('add-key-status').textContent = '✓ Key saved for this session';
+  document.getElementById('add-key-wrap').style.opacity = '0.5';
+}
+
+function loadApiKeyUI() {
+  const saved = sessionStorage.getItem('anthropic_key');
+  if (saved) {
+    document.getElementById('add-api-key').value = saved;
+    document.getElementById('add-key-status').textContent = '✓ Key loaded from session';
+    document.getElementById('add-key-wrap').style.opacity = '0.5';
+  }
+}
+// ============================================================
 let addState = { b64: null, dataUrl: null, outfits: [], itemId: null };
 
 document.getElementById('add-file-input').addEventListener('change', function(e) {
@@ -752,6 +783,14 @@ document.getElementById('add-file-input').addEventListener('change', function(e)
 });
 
 async function classifyItem() {
+  const apiKey = sessionStorage.getItem('anthropic_key');
+  if (!apiKey) {
+    const box = document.getElementById('add-ai-box');
+    box.className = 'add-ai-box on';
+    box.innerHTML = '⚠️ Enter your Anthropic API key above first, then tap Save.';
+    document.getElementById('add-form-wrap').classList.add('on');
+    return;
+  }
   const box = document.getElementById('add-ai-box');
   box.className = 'add-ai-box on';
   box.innerHTML = '<span class="add-spinner"></span> Identifying item...';
@@ -769,7 +808,13 @@ notes should be 1-2 sentences on fit and how to style it`;
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': sessionStorage.getItem('anthropic_key') || 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
+,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
@@ -875,7 +920,13 @@ Respond ONLY with valid JSON, no markdown:
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': sessionStorage.getItem('anthropic_key') || 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
+,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1500,
@@ -974,6 +1025,7 @@ async function loadPersistedItems() {
 
 // === Initialize ===
 buildDropdowns();
+loadApiKeyUI();
 populateStats();
 renderWardrobe();
 updateVibeCounts();
