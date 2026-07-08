@@ -347,78 +347,18 @@ section.view.active{display:block;animation:fadeIn 0.4s ease}
   <div class="page-head">
     <div class="page-meta">// Expand</div>
     <h1 class="page-title">Add a <em>new piece</em></h1>
-    <p class="page-tagline">Upload a photo — Claude identifies the item and builds outfits.</p>
   </div>
-  <div class="add-wrap">
-    <!-- The input MUST come before the label in the DOM for the for= association to work reliably -->
-    <input type="file" id="add-file-input" accept="image/*" style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0">
-    <label for="add-file-input" class="add-label-btn">
-      <span class="icon">📷</span>
-      <span class="hint">Tap to choose photo</span>
-      <span class="sub">camera · library · files</span>
-    </label>
-    <img id="add-preview" class="add-preview-img" alt="Preview">
-    <div class="add-ai-box" id="add-ai-box"></div>
-    <div class="add-form-wrap" id="add-form-wrap">
-      <div class="add-field">
-        <label>Label</label>
-        <input type="text" id="add-label" placeholder="e.g. Olive cargo pants">
-      </div>
-      <div class="add-field">
-        <label>Category</label>
-        <select id="add-type">
-          <option value="tee">Tee</option>
-          <option value="polo">Polo</option>
-          <option value="shirt">Shirt</option>
-          <option value="pants">Pants</option>
-          <option value="shoes">Shoes</option>
-          <option value="watch">Watch</option>
-          <option value="sunglasses">Sunglasses</option>
-          <option value="socks">Socks</option>
-        </select>
-      </div>
-      <div class="add-field">
-        <label>Colour family</label>
-        <select id="add-colour">
-          <option value="white">White / Off-white</option>
-          <option value="black">Black</option>
-          <option value="navy">Navy</option>
-          <option value="indigo">Indigo / Dark blue</option>
-          <option value="cobalt">Cobalt / Bright blue</option>
-          <option value="light-blue">Light blue</option>
-          <option value="grey">Grey</option>
-          <option value="beige">Beige / Cream</option>
-          <option value="brown">Brown / Tan</option>
-          <option value="olive">Olive / Khaki</option>
-          <option value="forest">Forest green</option>
-          <option value="sage">Sage green</option>
-          <option value="pink">Pink / Dusty rose</option>
-          <option value="salmon">Salmon / Peach</option>
-          <option value="orange">Orange</option>
-          <option value="maroon">Maroon / Burgundy</option>
-          <option value="multi">Multicolour / Print</option>
-        </select>
-      </div>
-      <div class="add-field">
-        <label>Notes (optional)</label>
-        <textarea id="add-notes" rows="2" placeholder="e.g. slim fit, rolls well, untucked"></textarea>
-      </div>
-      <button class="add-submit" id="add-submit" onclick="submitNewItem()">
-        Add to wardrobe + generate outfits
-      </button>
-    </div>
-    <div class="add-outfits" id="add-outfits">
-      <h3>Suggested outfits</h3>
-      <div id="add-outfits-list"></div>
-      <button class="add-confirm" onclick="addOutfitsAndFinish()">Add these outfits to dashboard</button>
-    </div>
-    <div class="add-success-wrap" id="add-success-wrap">
-      <div style="font-size:2.5rem;margin-bottom:0.75rem">✓</div>
-      <h3>Added to wardrobe</h3>
-      <p id="add-success-msg">Item and outfits saved.</p>
-      <button class="add-reset" onclick="resetAddView()">Add another item</button>
-    </div>
-  </div>
+
+  <p style="color:#8a8a90;font-size:0.85rem;margin-bottom:1rem">Tap the box to choose a photo.</p>
+
+  <input type="file" id="add-file-input" accept="image/*" style="display:none">
+  <label for="add-file-input" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;border:2px dashed #ffffff30;border-radius:14px;background:#1a1a1d;cursor:pointer;margin-bottom:1rem">
+    <span style="font-size:2.5rem;margin-bottom:0.5rem">📷</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#8a8a90">Tap to choose photo</span>
+  </label>
+
+  <img id="add-preview" style="width:100%;border-radius:10px;display:none;margin-bottom:1rem">
+  <p id="add-status" style="color:#8a8a90;font-size:0.85rem"></p>
 </section>
 
 </section>
@@ -707,196 +647,29 @@ $('#reset-filters').addEventListener('click', () => {
 });
 
 
-// ============================================================
-// ADD ITEM FEATURE
-// ============================================================
-let addState = { b64: null, dataUrl: null, outfits: [], itemId: null };
-
-// Wire file input on DOM ready
-document.getElementById('add-file-input').addEventListener('change', function(e) {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    addState.dataUrl = ev.target.result;
-    addState.b64 = ev.target.result.split(',')[1];
-    const preview = document.getElementById('add-preview');
-    preview.src = ev.target.result;
-    preview.classList.add('on');
-    // Hide the label button
-    document.querySelector('.add-label-btn').style.display = 'none';
-    classifyItem();
-  };
-  reader.readAsDataURL(file);
+// ADD ITEM - minimal test
+document.addEventListener('DOMContentLoaded', function() {
+  var inp = document.getElementById('add-file-input');
+  if (inp) {
+    inp.addEventListener('change', function(e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      document.getElementById('add-status').textContent = 'File selected: ' + file.name;
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        var img = document.getElementById('add-preview');
+        img.src = ev.target.result;
+        img.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 });
 
-async function classifyItem() {
-  const box = document.getElementById('add-ai-box');
-  box.className = 'add-ai-box on';
-  box.innerHTML = '<span class="add-spinner"></span> Identifying item...';
-
-  const wardCtx = Object.entries(DATA.wardrobe).map(([k,v]) => k+': '+v.label+' ('+v.type+')').join('\n');
-  const prompt = `You are a fashion assistant. Identify this clothing item for a wardrobe dashboard.
-
-Existing wardrobe:
-${wardCtx}
-
-Identify:
-1. type: one of tee, polo, shirt, pants, shoes, watch, sunglasses, socks
-2. label: brand + description e.g. "Navy slim chinos (Zara)"
-3. colour: one of white,black,navy,indigo,cobalt,light-blue,grey,beige,brown,olive,forest,sage,pink,salmon,orange,maroon,multi
-4. notes: 1-2 sentences on fit and styling
-
-Reply ONLY with valid JSON, no markdown:
-{"type":"tee","label":"...","colour":"navy","notes":"..."}`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6', max_tokens: 500,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: addState.b64 } },
-          { type: 'text', text: prompt }
-        ]}]
-      })
-    });
-    const data = await res.json();
-    const text = data.content.map(b => b.text||'').join('').replace(/```json|```/g,'').trim();
-    const p = JSON.parse(text);
-    document.getElementById('add-label').value = p.label || '';
-    document.getElementById('add-type').value = p.type || 'tee';
-    document.getElementById('add-colour').value = p.colour || 'black';
-    document.getElementById('add-notes').value = p.notes || '';
-    box.innerHTML = '<strong style="color:#f2f2f3">Identified:</strong> ' + (p.label||'') + ' (' + (p.type||'') + ', ' + (p.colour||'') + ')<br><span style="color:#8a8a90">' + (p.notes||'') + '</span>';
-  } catch(err) {
-    box.innerHTML = 'Could not auto-identify. Fill in the details below.';
-    console.error(err);
-  }
-  document.getElementById('add-form-wrap').classList.add('on');
-}
-
-async function submitNewItem() {
-  const btn = document.getElementById('add-submit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="add-spinner"></span> Generating outfits...';
-
-  const label = document.getElementById('add-label').value.trim() || 'New item';
-  const type = document.getElementById('add-type').value;
-  const colour = document.getElementById('add-colour').value;
-  const notes = document.getElementById('add-notes').value.trim();
-  const id = type + '_' + colour + '_' + Date.now().toString(36);
-  addState.itemId = id;
-
-  DATA.wardrobe[id] = { label, type };
-  DATA.images[id] = addState.dataUrl;
-
-  try { await window.storage.set('wi_'+id, JSON.stringify({id,label,type,colour,notes,dataUrl:addState.dataUrl})); } catch(e) {}
-
-  await generateOutfits(id, label, type, colour, notes);
-  btn.disabled = false;
-  btn.innerHTML = 'Add to wardrobe + generate outfits';
-}
-
-async function generateOutfits(id, label, type, colour, notes) {
-  const tops = Object.entries(DATA.wardrobe).filter(([k,v])=>['tee','polo','shirt'].includes(v.type)).map(([k,v])=>k+': '+v.label).join('\n');
-  const pants = Object.entries(DATA.wardrobe).filter(([k,v])=>v.type==='pants').map(([k,v])=>k+': '+v.label).join('\n');
-  const shoes = Object.entries(DATA.wardrobe).filter(([k,v])=>v.type==='shoes').map(([k,v])=>k+': '+v.label).join('\n');
-
-  const isTop = ['tee','polo','shirt'].includes(type);
-  const isPants = type==='pants';
-  const isShoes = type==='shoes';
-  let ctx = isTop ? 'PANTS:\n'+pants+'\nSHOES:\n'+shoes
-           : isPants ? 'TOPS:\n'+tops+'\nSHOES:\n'+shoes
-           : isShoes ? 'TOPS:\n'+tops+'\nPANTS:\n'+pants
-           : 'Suggest which existing outfits this accessory complements.';
-
-  const prompt = `Fashion assistant for a wardrobe dashboard. New item added:
-"${label}" (type:${type}, colour:${colour})
-Notes: ${notes||'none'}
-Item ID: "${id}"
-
-Pair with:
-${ctx}
-
-Generate 6 outfit combinations using EXACT wardrobe IDs above. Use "${id}" for the new item's slot.
-Vibes must be from: casual, everyday, street, resort.
-
-Reply ONLY with valid JSON, no markdown:
-{"outfits":[{"title":"Short name","top":"id","bottom":"id","shoes":"id","vibes":["everyday"],"occasion":"class / coffee","notes":"One styling sentence.","score":8.5}]}`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }] })
-    });
-    const data = await res.json();
-    const text = data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
-    const p = JSON.parse(text);
-    addState.outfits = p.outfits.map(o => ({
-      ...o,
-      score_breakdown: {color:o.score,silhouette:o.score,versatility:o.score,sophistication:o.score},
-      sunglasses:'sun_round_orange', socks:'socks_skechers_white', socks_visible:false, watch:'watch_tommy_tan'
-    }));
-    document.getElementById('add-outfits-list').innerHTML = addState.outfits.map(o => {
-      return '<div class="add-outfit-pill"><strong>'+o.title+' <span style="color:#e0b85a;font-size:0.8rem">'+o.score+'</span></strong><span>'
-        +(DATA.wardrobe[o.top]?.label||o.top)+' + '+(DATA.wardrobe[o.bottom]?.label||o.bottom)+' + '+(DATA.wardrobe[o.shoes]?.label||o.shoes)
-        +'</span><br><span style="color:#8a8a90;font-size:0.78rem">'+o.notes+'</span></div>';
-    }).join('');
-    document.getElementById('add-outfits').classList.add('on');
-  } catch(err) {
-    console.error(err);
-    document.getElementById('add-outfits').classList.add('on');
-    document.getElementById('add-outfits-list').innerHTML = '<p style="color:#8a8a90">Could not generate outfits. Item added to wardrobe.</p>';
-  }
-}
-
-function addOutfitsAndFinish() {
-  DATA.outfits.push(...addState.outfits);
-  buildDropdowns(); populateStats(); renderWardrobe(); updateVibeCounts(); renderOutfits();
-  document.getElementById('add-outfits').classList.remove('on');
-  document.getElementById('add-form-wrap').classList.remove('on');
-  document.getElementById('add-ai-box').classList.remove('on');
-  document.getElementById('add-success-msg').textContent = '"'+DATA.wardrobe[addState.itemId]?.label+'" added with '+addState.outfits.length+' outfits.';
-  document.getElementById('add-success-wrap').classList.add('on');
-  setTimeout(() => document.querySelector('.tab[data-target="wardrobe"]').click(), 2500);
-}
-
-function resetAddView() {
-  addState = { b64:null, dataUrl:null, outfits:[], itemId:null };
-  document.getElementById('add-preview').classList.remove('on');
-  document.getElementById('add-preview').src = '';
-  document.querySelector('.add-label-btn').style.display = '';
-  document.getElementById('add-ai-box').className = 'add-ai-box';
-  document.getElementById('add-form-wrap').classList.remove('on');
-  document.getElementById('add-outfits').classList.remove('on');
-  document.getElementById('add-success-wrap').classList.remove('on');
-  document.getElementById('add-file-input').value = '';
-  document.getElementById('add-label').value = '';
-  document.getElementById('add-notes').value = '';
-}
-
-async function loadPersistedItems() {
-  try {
-    const keys = await window.storage.list('wi_');
-    if (!keys || !keys.keys) return;
-    for (const key of keys.keys) {
-      try {
-        const r = await window.storage.get(key);
-        if (!r) continue;
-        const item = JSON.parse(r.value);
-        if (!DATA.wardrobe[item.id]) {
-          DATA.wardrobe[item.id] = { label:item.label, type:item.type };
-          DATA.images[item.id] = item.dataUrl;
-        }
-      } catch(e) {}
-    }
-    populateStats(); renderWardrobe(); buildDropdowns();
-  } catch(e) { console.log('Storage unavailable', e); }
-}
+function resetAddView() {}
+function addOutfitsAndFinish() {}
+function submitNewItem() {}
+async function loadPersistedItems() {}
 
 
 // === Initialize ===
