@@ -256,6 +256,7 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
     <h1 class="page-title">Every <em>piece</em></h1>
     <p class="page-tagline">Tap any item to enlarge.</p>
   </div>
+  <button class="reset-btn" style="margin-bottom:1.2rem" onclick="runManualDedupe()">Clean up duplicates</button>
   <div id="wardrobe-content"></div>
 </section>
 
@@ -507,6 +508,150 @@ const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
 const img = id => DATA.images[id] || '';
 const label = id => DATA.wardrobe[id] ? DATA.wardrobe[id].label : id;
+
+// === Duplicate detection ===
+// Normalizes a label into a token set so near-duplicate labels (different
+// capitalization, punctuation, or minor wording like "quarter-zip pullover"
+// vs "Quarter-Zip Sweater") can be compared for similarity.
+function labelTokens(str) {
+  return new Set(
+    (str || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean)
+  );
+}
+function tokenSimilarity(a, b) {
+  const ta = labelTokens(a), tb = labelTokens(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let shared = 0;
+  for (const t of ta) if (tb.has(t)) shared++;
+  return shared / Math.max(ta.size, tb.size);
+}
+// Finds an existing wardrobe item of the same type whose label is the same
+// or near-identical to the given label. Used to stop duplicate items being
+// created when the same physical piece gets submitted more than once.
+function findDuplicateItem(type, newLabel) {
+  for (const [id, item] of Object.entries(DATA.wardrobe)) {
+    if (item.type !== type) continue;
+    if (tokenSimilarity(item.label, newLabel) >= 0.6) return id;
+  }
+  return null;
+}
+
+// === Wardrobe/outfit dedupe-and-merge ===
+// Clusters near-duplicate wardrobe items (same type, similar label), picks
+// one canonical id per cluster (preferring an item with no addedAt, i.e. an
+// original baked-in piece, otherwise the earliest-added one), remaps every
+// outfit's top/bottom/shoes/base fields from the duplicate ids onto the
+// canonical id, then removes the duplicate entries. Persists the cleanup so
+// it survives a refresh. Returns a summary for the on-screen confirmation.
+async function dedupeWardrobeAndOutfits() {
+  const entries = Object.entries(DATA.wardrobe);
+  const byType = {};
+  for (const [id, item] of entries) {
+    (byType[item.type] = byType[item.type] || []).push(id);
+  }
+
+  const remap = {}; // duplicateId -> canonicalId
+  let mergedCount = 0;
+  const removedIds = [];
+
+  for (const type of Object.keys(byType)) {
+    const ids = byType[type].slice();
+    const used = new Set();
+    for (let i = 0; i < ids.length; i++) {
+      const idA = ids[i];
+      if (used.has(idA)) continue;
+      const cluster = [idA];
+      for (let j = i + 1; j < ids.length; j++) {
+        const idB = ids[j];
+        if (used.has(idB)) continue;
+        if (tokenSimilarity(DATA.wardrobe[idA].label, DATA.wardrobe[idB].label) >= 0.6) {
+          cluster.push(idB);
+          used.add(idB);
+        }
+      }
+      used.add(idA);
+      if (cluster.length < 2) continue;
+
+      // Pick canonical: prefer no addedAt (original baked-in item), else earliest addedAt.
+      let canonical = cluster[0];
+      for (const id of cluster) {
+        const a = DATA.wardrobe[canonical].addedAt, b = DATA.wardrobe[id].addedAt;
+        if (!b && a) { canonical = id; continue; }
+        if (a && b && b < a) canonical = id;
+      }
+      for (const id of cluster) {
+        if (id === canonical) continue;
+        remap[id] = canonical;
+        removedIds.push(id);
+        mergedCount++;
+      }
+    }
+  }
+
+  if (mergedCount === 0) return { mergedCount: 0, removedIds: [] };
+
+  // Remap outfit references and track which outfits actually changed.
+  const changedOutfits = [];
+  for (const o of DATA.outfits) {
+    let changed = false;
+    for (const slot of ['top', 'bottom', 'shoes', 'base']) {
+      if (o[slot] && remap[o[slot]]) { o[slot] = remap[o[slot]]; changed = true; }
+    }
+    if (changed) changedOutfits.push(o);
+  }
+
+  // Remove duplicate wardrobe/image entries from memory.
+  for (const id of removedIds) {
+    delete DATA.wardrobe[id];
+    delete DATA.images[id];
+  }
+
+  // Persist: delete duplicate wi_ storage keys, and re-save any outfit whose
+  // references changed so the fix survives a reload.
+  try {
+    const ops = [];
+    for (const id of removedIds) ops.push(window.storage.delete('wi_' + id));
+    for (const o of changedOutfits) {
+      if (String(o.id).startsWith('new_')) {
+        ops.push(window.storage.set('onew_' + o.id, JSON.stringify(o)));
+      } else {
+        ops.push(window.storage.set('opatch_' + o.id, JSON.stringify(o)));
+      }
+    }
+    await Promise.all(ops);
+  } catch(e) { console.log('dedupe persistence unavailable', e); }
+
+  return { mergedCount, removedIds };
+}
+
+// Small on-screen banner for surfacing storage errors/cleanup results instead
+// of failing silently — makes future sync problems visible instead of hidden.
+function showBanner(msg, isError) {
+  let el = document.getElementById('sync-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;padding:0.6rem 1rem;font-family:JetBrains Mono,monospace;font-size:0.72rem;text-align:center;color:#0e0e10;';
+    document.body.appendChild(el);
+  }
+  el.style.background = isError ? '#e07a5a' : '#e0b85a';
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(showBanner._t);
+  showBanner._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+async function runManualDedupe() {
+  const result = await dedupeWardrobeAndOutfits();
+  populateStats();
+  renderWardrobe();
+  buildDropdowns();
+  updateVibeCounts();
+  renderOutfits();
+  showBanner(result.mergedCount > 0
+    ? 'Cleaned up ' + result.mergedCount + ' duplicate wardrobe item' + (result.mergedCount === 1 ? '' : 's') + '.'
+    : 'No duplicates found.', false);
+}
 
 // === Build outfit card ===
 function buildCard(o, idx) {
@@ -867,15 +1012,27 @@ notes should be 1-2 sentences on fit and how to style it`;
 }
 
 async function submitNewItem() {
-  const btn = document.getElementById('add-submit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="add-spinner"></span> Generating outfits...';
-
   const label   = document.getElementById('add-label').value.trim() || 'New item';
   const type    = document.getElementById('add-type').value;
   const colour  = document.getElementById('add-colour').value;
   const notes   = document.getElementById('add-notes').value.trim();
-  const id      = type + '_' + colour + '_' + Date.now().toString(36);
+
+  // Guard against duplicate items — same type + near-identical label already
+  // in the wardrobe. This is the #1 cause of runaway duplicate outfits.
+  const dupId = findDuplicateItem(type, label);
+  if (dupId) {
+    const proceed = confirm(
+      'This looks like an item already in your wardrobe:\n"' + DATA.wardrobe[dupId].label + '"\n\n' +
+      'Add "' + label + '" as a separate new piece anyway? Choose Cancel if this is the same item.'
+    );
+    if (!proceed) return;
+  }
+
+  const btn = document.getElementById('add-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="add-spinner"></span> Generating outfits...';
+
+  const id = type + '_' + colour + '_' + Date.now().toString(36);
   addState.itemId = id;
 
   // Add to DATA immediately
@@ -1230,7 +1387,20 @@ populateStats();
 renderWardrobe();
 updateVibeCounts();
 renderOutfits();
-loadPersistedItems();
+loadPersistedItems().then(async () => {
+  try {
+    const result = await dedupeWardrobeAndOutfits();
+    if (result.mergedCount > 0) {
+      console.log('[wardrobe dedupe] merged ' + result.mergedCount + ' duplicate item(s): ' + result.removedIds.join(', '));
+      populateStats();
+      renderWardrobe();
+      buildDropdowns();
+      updateVibeCounts();
+      renderOutfits();
+      showBanner('Cleaned up ' + result.mergedCount + ' duplicate wardrobe item' + (result.mergedCount === 1 ? '' : 's') + '.', false);
+    }
+  } catch(e) { console.log('dedupe pass failed', e); }
+});
 </script>
 </body>
 </html>
