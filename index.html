@@ -82,8 +82,8 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
 .outfit-vibes{display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.4rem;align-items:center}
 .outfit-vibe-tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.18em;color:var(--ink-mute);display:inline-flex;align-items:center;gap:0.35rem}
 .outfit-vibe-tag .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-.outfit-score{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--ink-mute);background:var(--bg-2);padding:0.15rem 0.5rem;border-radius:99px;letter-spacing:0.1em}
-.outfit-score strong{color:var(--ink);font-weight:600}
+.outfit-score{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:1.2rem;color:var(--ink-mute);background:var(--bg-2);padding:0.3rem 0.9rem;border-radius:99px;letter-spacing:0.1em}
+.outfit-score strong{color:var(--ink);font-weight:700;font-size:1.3rem}
 .outfit-title{font-family:'Fraunces',serif;font-size:1.55rem;font-weight:400;letter-spacing:-0.02em;line-height:1.05;font-style:italic}
 .outfit-occasion{font-family:'JetBrains Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.14em;color:var(--ink-mute);margin-top:0.5rem}
 
@@ -217,7 +217,7 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
   <div class="page-head">
     <div class="page-meta">// Browse</div>
     <h1 class="page-title">Pick a <em>vibe</em></h1>
-    <p class="page-tagline">Filter by mood, then drill down by individual pieces. Sort by best→worst when you want my top picks. Casual shirts are untucked with sleeves rolled.</p>
+    <p class="page-tagline">Filter by mood, then drill down by individual pieces. Always shown best→worst. Casual shirts are untucked with sleeves rolled.</p>
   </div>
   
   <div class="filter-bar" id="vibe-filter">
@@ -241,13 +241,6 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
     <div class="dropdown-group">
       <label for="filter-shoes">Shoes</label>
       <select id="filter-shoes"><option value="all">All shoes</option></select>
-    </div>
-    <div class="dropdown-group">
-      <label for="filter-sort">Sort</label>
-      <select id="filter-sort">
-        <option value="default">Default order</option>
-        <option value="score-desc" selected>Best → Worst</option>
-      </select>
     </div>
     <button class="reset-btn" id="reset-filters">Reset</button>
   </div>
@@ -515,27 +508,6 @@ const $$ = sel => Array.from(document.querySelectorAll(sel));
 const img = id => DATA.images[id] || '';
 const label = id => DATA.wardrobe[id] ? DATA.wardrobe[id].label : id;
 
-// Claude's response should be pure JSON, but if it adds any stray preamble/
-// postamble text despite instructions, a plain JSON.parse throws and the
-// whole outfit-gen result gets silently dropped. This pulls out the {...}
-// blob before parsing so a stray sentence doesn't nuke the whole result.
-function extractJSON(text) {
-  try { return JSON.parse(text); } catch(e) {}
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) throw new Error('No JSON object found in response: ' + text.slice(0, 200));
-  return JSON.parse(text.slice(start, end + 1));
-}
-
-// Storage values should always come back as plain JSON strings, but as a
-// safety net in case a backend ever hands back an already-parsed object,
-// this handles both without throwing (a throw here silently drops the item).
-function parseStoredValue(value) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'object') return value;
-  return JSON.parse(value);
-}
-
 // === Build outfit card ===
 function buildCard(o, idx) {
   const isVisible = o.socks_visible;
@@ -601,8 +573,8 @@ function buildCard(o, idx) {
   }
   
   // Rank badge for top 10
-  const rankAttr = (idx !== null && idx < 10 && state.sort === 'score-desc') ? `data-rank="${idx+1}"` : '';
-  const rankClass = (idx !== null && idx < 10 && state.sort === 'score-desc') ? 'rank-top' : '';
+  const rankAttr = (idx !== null && idx < 10) ? `data-rank="${idx+1}"` : '';
+  const rankClass = (idx !== null && idx < 10) ? 'rank-top' : '';
   
   return `
     <div class="outfit ${rankClass}" ${rankAttr}>
@@ -625,17 +597,13 @@ function buildCard(o, idx) {
 function renderOutfits() {
   let filtered = DATA.outfits.filter(o => {
     if (state.vibe !== 'all' && !o.vibes.includes(state.vibe)) return false;
-    if (state.top !== 'all' && o.top !== state.top) return false;
+    if (state.top !== 'all' && o.top !== state.top && o.base !== state.top) return false;
     if (state.pants !== 'all' && o.bottom !== state.pants) return false;
     if (state.shoes !== 'all' && o.shoes !== state.shoes) return false;
     return true;
   });
   
-  if (state.sort === 'score-desc') {
-    filtered.sort((a,b) => b.score - a.score);
-  } else if (state.sort === 'score-asc') {
-    filtered.sort((a,b) => a.score - b.score);
-  }
+  filtered.sort((a,b) => b.score - a.score);
   
   const grid = $('#outfits-grid');
   const empty = $('#empty');
@@ -729,11 +697,12 @@ function renderWardrobe() {
     'Accessories': ['accessory'],
   };
   
-  // Identify which items are "new"
-  const NEW_ITEMS = new Set([
-    'pants_blue_jeans', 'polo_grey_heather',
-    'tee_black_easybuy', 'tee_sea_grey_easybuy',
-    'watch_boss_black', 'watch_tommy_tan']);
+  // Identify which items are "new" — anything added within the last 7 days,
+  // based on the addedAt timestamp stamped on the item when it was added via
+  // + Add Item. Baked-in items have no addedAt, so they never show as new.
+  const NEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const isNew = (v) => v.addedAt && (now - v.addedAt) < NEW_WINDOW_MS;
   
   let html = '';
   for (const [groupName, types] of Object.entries(groups)) {
@@ -745,7 +714,7 @@ function renderWardrobe() {
         ${items.map(([k,v]) => `
           <div class="wardrobe-item" onclick="openModal('${k}')">
             <div class="wardrobe-item-img" style="background-image:url('${img(k)}')"></div>
-            <div class="wardrobe-item-label">${v.label}${NEW_ITEMS.has(k) ? '<span class="new-badge">new</span>' : ''}</div>
+            <div class="wardrobe-item-label">${v.label}${isNew(v) ? '<span class="new-badge">new</span>' : ''}</div>
           </div>
         `).join('')}
       </div>
@@ -786,19 +755,15 @@ $$('#vibe-filter .filter-btn').forEach(b => {
 $('#filter-top').addEventListener('change', e => { state.top = e.target.value; renderOutfits(); });
 $('#filter-pants').addEventListener('change', e => { state.pants = e.target.value; renderOutfits(); });
 $('#filter-shoes').addEventListener('change', e => { state.shoes = e.target.value; renderOutfits(); });
-$('#filter-sort').addEventListener('change', e => { state.sort = e.target.value; renderOutfits(); });
-
 // === Reset ===
 $('#reset-filters').addEventListener('click', () => {
   state.vibe = 'all';
   state.top = 'all';
   state.pants = 'all';
   state.shoes = 'all';
-  state.sort = 'default';
   $('#filter-top').value = 'all';
   $('#filter-pants').value = 'all';
   $('#filter-shoes').value = 'all';
-  $('#filter-sort').value = 'default';
   $$('#vibe-filter .filter-btn').forEach(x => x.classList.remove('active'));
   $('#vibe-filter .filter-btn[data-vibe="all"]').classList.add('active');
   renderOutfits();
@@ -882,7 +847,7 @@ notes should be 1-2 sentences on fit and how to style it`;
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
     const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g,'').trim();
-    const p = extractJSON(text);
+    const p = JSON.parse(text);
     document.getElementById('add-label').value = p.label || '';
     // Match type to available options
     const typeEl = document.getElementById('add-type');
@@ -914,12 +879,13 @@ async function submitNewItem() {
   addState.itemId = id;
 
   // Add to DATA immediately
-  DATA.wardrobe[id] = { label, type };
+  const addedAt = Date.now();
+  DATA.wardrobe[id] = { label, type, addedAt };
   DATA.images[id]   = addState.dataUrl;
 
   // Persist to storage
   try {
-    await window.storage.set('wi_' + id, JSON.stringify({ id, label, type, colour, notes, dataUrl: addState.dataUrl }));
+    await window.storage.set('wi_' + id, JSON.stringify({ id, label, type, colour, notes, dataUrl: addState.dataUrl, addedAt }));
   } catch(e) { console.log('storage unavailable', e); }
 
   await generateOutfits(id, label, type, colour, notes);
@@ -971,7 +937,7 @@ async function generateOutfits(id, label, type, colour, notes) {
     .filter(o => !!o[slot])
     .slice()
     .sort((a, b) => b.score - a.score)
-    .slice(0, 30);
+    .slice(0, 60);
 
   const reworkLines = rework.map((o, i) =>
     `${i}: title="${o.title}" | top=${DATA.wardrobe[o.top]?.label||o.top} | bottom=${DATA.wardrobe[o.bottom]?.label||o.bottom} | shoes=${DATA.wardrobe[o.shoes]?.label||o.shoes} | vibes=${o.vibes.join('/')} | score=${o.score}`
@@ -985,9 +951,9 @@ ${notes ? 'Notes: ' + notes : ''}
 Pair it with items from this wardrobe (use EXACT IDs):
 ${pairingLines}
 
-TASK 1 — Generate 6 new outfit combinations built around the new item.
+TASK 1 — Generate 12 new outfit combinations built around the new item. Push for real variety across vibes (casual, everyday, street, polished) and across different pants/shoes/tops pairings rather than minor variations of the same look.
 
-TASK 2 — Rework existing outfits. Below are ${rework.length} existing outfits that currently use the same "${slot}" slot the new item fits into. For each one, decide if swapping in the NEW item would make it a clearly better outfit (better color story, better silhouette, more versatile, more seasonally accurate). Only include an outfit in "updates" if it's a real improvement — most should probably be left alone.
+TASK 2 — Rework existing outfits. Below are ${rework.length} existing outfits sampled broadly across the wardrobe that currently use the same "${slot}" slot the new item fits into. For each one, decide if swapping in the NEW item would make it a clearly better outfit (better color story, better silhouette, more versatile, more seasonally accurate). Include every outfit where the new item is a real improvement — don't be overly conservative, the goal is to meaningfully refresh the wardrobe with each new piece, not just tweak one or two looks.
 ${reworkLines}
 
 Rules:
@@ -995,7 +961,7 @@ Rules:
 - vibes must be from: casual, everyday, street, polished
 - score is 1-10 decimal
 - notes is one short styling sentence
-- This wardrobe is worn year-round, not seasonally restricted — do not assume summer-only occasions unless the piece itself is clearly seasonal (e.g. heavy wool)${isOuterLayer ? '\n- This new item is worn OVER a base layer (a tee/polo/shirt underneath), since it\'s a sweater/hoodie. For every outfit and update, include a "base" field with the exact id of the base-layer top worn underneath — pick something that peeks out at the collar/cuffs sensibly (e.g. a plain tee under a hoodie, a collared shirt under a v-neck sweater). Never leave "base" empty.' : ''}
+- This wardrobe is worn year-round, not seasonally restricted — do not assume summer-only occasions unless the piece itself is clearly seasonal (e.g. heavy wool)${isOuterLayer ? '\n- This new item is worn OVER a base layer (a tee/polo/shirt underneath), since it\'s a sweater/hoodie. For every outfit and update, include a "base" field with the exact id of the base-layer top worn underneath — pick something that peeks out at the collar/cuffs sensibly (e.g. a plain tee under a hoodie, a collared shirt under a v-neck sweater). Never leave "base" empty.' : ''}${isShoes ? '\n- SHOE ROTATION: navy loafers are already heavily overused across this wardrobe. Unless the new shoe is clearly the wrong fit for a look, prefer pairing outfits with the NEW shoe over defaulting back to navy loafers. If the new item is a sneaker, actively look for outfits currently built around navy loafers or older sneakers that would work just as well or better in the new sneaker, and put those in "updates."' : '\n- Across both new outfits and reworks, avoid defaulting to navy loafers as the safe choice — they are already overrepresented. Lean on other shoes in the wardrobe (especially newer sneakers) where they fit the vibe.'}
 
 Respond ONLY with valid JSON, no markdown:
 {"outfits":[{"title":"Short name","top":"exact_id","bottom":"exact_id","shoes":"exact_id"${isOuterLayer ? ',"base":"exact_id"' : ''},"vibes":["everyday"],"occasion":"class / coffee","notes":"One sentence.","score":8.2}],"updates":[{"index":0,"title":"Updated name","top":"exact_id","bottom":"exact_id","shoes":"exact_id"${isOuterLayer ? ',"base":"exact_id"' : ''},"vibes":["everyday"],"occasion":"class / coffee","notes":"Why the swap helps.","score":8.6}]}`;
@@ -1008,14 +974,14 @@ Respond ONLY with valid JSON, no markdown:
         },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 3500,
+        max_tokens: 6500,
         messages: [{ role: 'user', content: prompt }]
       })
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
     const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g,'').trim();
-    const p = extractJSON(text);
+    const p = JSON.parse(text);
 
     const batchStamp = Date.now().toString(36);
     addState.outfits = (p.outfits || []).map((o, i) => ({
@@ -1077,7 +1043,7 @@ Respond ONLY with valid JSON, no markdown:
     document.getElementById('add-outfits').classList.add('on');
   } catch(err) {
     console.error('outfit gen error:', err);
-    document.getElementById('add-outfits-list').innerHTML = '<p style="color:#e0625a">Outfit generation failed: ' + (err.message || err).toString().slice(0,300) + '</p><p style="color:#8a8a90">Item has been added to your wardrobe — you can try re-generating outfits later, or add them manually.</p>';
+    document.getElementById('add-outfits-list').innerHTML = '<p style="color:#8a8a90">Could not generate outfits automatically. Item has been added to your wardrobe.</p>';
     document.getElementById('add-outfits').classList.add('on');
   }
 }
@@ -1115,14 +1081,11 @@ async function addOutfitsAndFinish() {
     for (const u of updates) {
       saves.push(window.storage.set('opatch_' + u.baseId, JSON.stringify(u.after)));
     }
-    const results = await Promise.all(saves);
-    console.log('[wardrobe sync] saved', results.length, 'entries:', results);
-  } catch(e) { console.log('[wardrobe sync] outfit persistence FAILED', e); }
+    await Promise.all(saves);
+  } catch(e) { console.log('outfit persistence unavailable', e); }
 
-  // Refresh everything — sort stays on Best → Worst so the new/reworked
-  // pieces immediately land in their real rank position alongside everything else.
-  state.sort = 'score-desc';
-  document.getElementById('filter-sort').value = 'score-desc';
+  // Refresh everything — outfits are always shown best → worst, so the
+  // new/reworked pieces immediately land in their real rank position.
   buildDropdowns();
   populateStats();
   renderWardrobe();
@@ -1169,19 +1132,18 @@ async function loadPersistedItems() {
   // Restore new wardrobe items (photos + labels added via + Add Item)
   try {
     const keys = await window.storage.list('wi_');
-    console.log('[wardrobe sync] wi_ keys found:', keys && keys.keys ? keys.keys.length : 0);
     if (keys && keys.keys && keys.keys.length) {
       for (const key of keys.keys) {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const item = parseStoredValue(r.value);
+          const item = JSON.parse(r.value);
           if (item.id && !DATA.wardrobe[item.id]) {
-            DATA.wardrobe[item.id] = { label: item.label, type: item.type };
+            DATA.wardrobe[item.id] = { label: item.label, type: item.type, addedAt: item.addedAt || null };
             DATA.images[item.id]   = item.dataUrl;
             changed = true;
           }
-        } catch(e) { console.log('[wardrobe sync] failed to restore', key, e); }
+        } catch(e) {}
       }
     }
   } catch(e) { console.log('wardrobe item storage unavailable', e); }
@@ -1189,28 +1151,35 @@ async function loadPersistedItems() {
   // Restore brand-new outfits generated by a previous add-item session
   try {
     const keys = await window.storage.list('onew_');
-    console.log('[wardrobe sync] onew_ keys found:', keys && keys.keys ? keys.keys.length : 0);
     if (keys && keys.keys && keys.keys.length) {
       const existingIds = new Set(DATA.outfits.map(o => o.id));
+      let pushed = 0, skippedDupe = 0, skippedNoId = 0;
       for (const key of keys.keys) {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const outfit = parseStoredValue(r.value);
-          if (outfit.id && !existingIds.has(outfit.id)) {
-            DATA.outfits.push(outfit);
-            existingIds.add(outfit.id);
-            changed = true;
+          const outfit = JSON.parse(r.value);
+          if (!outfit.id) {
+            skippedNoId++;
+            continue;
           }
-        } catch(e) { console.log('[wardrobe sync] failed to restore outfit', key, e); }
+          if (existingIds.has(outfit.id)) {
+            skippedDupe++;
+            continue;
+          }
+          DATA.outfits.push(outfit);
+          existingIds.add(outfit.id);
+          changed = true;
+          pushed++;
+        } catch(e) {}
       }
+      console.log('[wardrobe sync] onew_ result. pushed: ' + pushed + ' | skipped as duplicate id: ' + skippedDupe + ' | skipped no id: ' + skippedNoId + ' | DATA.outfits.length now: ' + DATA.outfits.length);
     }
   } catch(e) { console.log('new-outfit storage unavailable', e); }
 
   // Re-apply reworked-outfit patches from a previous add-item session
   try {
     const keys = await window.storage.list('opatch_');
-    console.log('[wardrobe sync] opatch_ keys found:', keys && keys.keys ? keys.keys.length : 0);
     if (keys && keys.keys && keys.keys.length) {
       const byId = {};
       DATA.outfits.forEach(o => { if (o.id) byId[o.id] = o; });
@@ -1218,7 +1187,7 @@ async function loadPersistedItems() {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const patch = parseStoredValue(r.value);
+          const patch = JSON.parse(r.value);
           const baseId = key.slice('opatch_'.length);
           const target = byId[baseId];
           if (target) {
@@ -1235,7 +1204,7 @@ async function loadPersistedItems() {
             });
             changed = true;
           }
-        } catch(e) { console.log('[wardrobe sync] failed to restore patch', key, e); }
+        } catch(e) {}
       }
     }
   } catch(e) { console.log('outfit-patch storage unavailable', e); }
