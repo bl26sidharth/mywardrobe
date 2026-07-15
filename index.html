@@ -527,6 +527,15 @@ function extractJSON(text) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+// Storage values should always come back as plain JSON strings, but as a
+// safety net in case a backend ever hands back an already-parsed object,
+// this handles both without throwing (a throw here silently drops the item).
+function parseStoredValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object') return value;
+  return JSON.parse(value);
+}
+
 // === Build outfit card ===
 function buildCard(o, idx) {
   const isVisible = o.socks_visible;
@@ -1166,13 +1175,13 @@ async function loadPersistedItems() {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const item = JSON.parse(r.value);
+          const item = parseStoredValue(r.value);
           if (item.id && !DATA.wardrobe[item.id]) {
             DATA.wardrobe[item.id] = { label: item.label, type: item.type };
             DATA.images[item.id]   = item.dataUrl;
             changed = true;
           }
-        } catch(e) {}
+        } catch(e) { console.log('[wardrobe sync] failed to restore', key, e); }
       }
     }
   } catch(e) { console.log('wardrobe item storage unavailable', e); }
@@ -1187,13 +1196,13 @@ async function loadPersistedItems() {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const outfit = JSON.parse(r.value);
+          const outfit = parseStoredValue(r.value);
           if (outfit.id && !existingIds.has(outfit.id)) {
             DATA.outfits.push(outfit);
             existingIds.add(outfit.id);
             changed = true;
           }
-        } catch(e) {}
+        } catch(e) { console.log('[wardrobe sync] failed to restore outfit', key, e); }
       }
     }
   } catch(e) { console.log('new-outfit storage unavailable', e); }
@@ -1209,7 +1218,7 @@ async function loadPersistedItems() {
         try {
           const r = await window.storage.get(key);
           if (!r) continue;
-          const patch = JSON.parse(r.value);
+          const patch = parseStoredValue(r.value);
           const baseId = key.slice('opatch_'.length);
           const target = byId[baseId];
           if (target) {
@@ -1226,7 +1235,7 @@ async function loadPersistedItems() {
             });
             changed = true;
           }
-        } catch(e) {}
+        } catch(e) { console.log('[wardrobe sync] failed to restore patch', key, e); }
       }
     }
   } catch(e) { console.log('outfit-patch storage unavailable', e); }
