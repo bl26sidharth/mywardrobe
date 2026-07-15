@@ -641,6 +641,48 @@ function showBanner(msg, isError) {
   showBanner._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
+// Permanently deletes every wardrobe item whose label contains any of the
+// given (case-insensitive) substrings, plus every outfit that references
+// those items in any slot (top/bottom/shoes/base) — including duplicates.
+// Deletions are marked with idel_/odel_ storage keys so they stay gone on
+// refresh even though this file re-bakes the original items/outfits fresh
+// on every load.
+async function purgeItemsByLabel(substrings) {
+  const needles = substrings.map(s => s.toLowerCase());
+  const matches = (lbl) => needles.some(n => (lbl || '').toLowerCase().includes(n));
+
+  const removedItemIds = Object.entries(DATA.wardrobe)
+    .filter(([id, v]) => matches(v.label))
+    .map(([id]) => id);
+  const removedItemSet = new Set(removedItemIds);
+
+  const removedOutfits = DATA.outfits.filter(o =>
+    removedItemSet.has(o.top) || removedItemSet.has(o.bottom) || removedItemSet.has(o.shoes) || removedItemSet.has(o.base)
+  );
+  const removedOutfitIds = new Set(removedOutfits.map(o => o.id));
+
+  // Remove from memory.
+  for (const id of removedItemIds) { delete DATA.wardrobe[id]; delete DATA.images[id]; }
+  DATA.outfits = DATA.outfits.filter(o => !removedOutfitIds.has(o.id));
+
+  // Persist: mark permanent deletions, and clean up now-orphaned storage keys.
+  try {
+    const ops = [];
+    for (const id of removedItemIds) {
+      ops.push(window.storage.set('idel_' + id, '1'));
+      ops.push(window.storage.delete('wi_' + id));
+    }
+    for (const id of removedOutfitIds) {
+      ops.push(window.storage.set('odel_' + id, '1'));
+      ops.push(window.storage.delete('onew_' + id));
+      ops.push(window.storage.delete('opatch_' + id));
+    }
+    await Promise.all(ops);
+  } catch(e) { console.log('purge persistence unavailable', e); }
+
+  return { removedItemIds, removedOutfitIds: Array.from(removedOutfitIds) };
+}
+
 async function runManualDedupe() {
   const result = await dedupeWardrobeAndOutfits();
   populateStats();
@@ -1366,6 +1408,30 @@ async function loadPersistedItems() {
     }
   } catch(e) { console.log('outfit-patch storage unavailable', e); }
 
+  // Apply permanent deletions — items/outfits explicitly removed (e.g. via
+  // purgeItemsByLabel) are marked with 'idel_'/'odel_' keys so they stay gone
+  // even though baked-in items/outfits get rebuilt fresh from this file on
+  // every load.
+  try {
+    const idelKeys = await window.storage.list('idel_');
+    if (idelKeys && idelKeys.keys && idelKeys.keys.length) {
+      for (const key of idelKeys.keys) {
+        const id = key.slice('idel_'.length);
+        if (DATA.wardrobe[id]) { delete DATA.wardrobe[id]; delete DATA.images[id]; changed = true; }
+      }
+    }
+  } catch(e) { console.log('item-deletion storage unavailable', e); }
+
+  try {
+    const odelKeys = await window.storage.list('odel_');
+    if (odelKeys && odelKeys.keys && odelKeys.keys.length) {
+      const deletedIds = new Set(odelKeys.keys.map(k => k.slice('odel_'.length)));
+      const before = DATA.outfits.length;
+      DATA.outfits = DATA.outfits.filter(o => !deletedIds.has(o.id));
+      if (DATA.outfits.length !== before) changed = true;
+    }
+  } catch(e) { console.log('outfit-deletion storage unavailable', e); }
+
   if (changed) {
     populateStats();
     renderWardrobe();
@@ -1389,17 +1455,29 @@ updateVibeCounts();
 renderOutfits();
 loadPersistedItems().then(async () => {
   try {
+    const purgeResult = await purgeItemsByLabel([
+      'new balance', 'cable-knit', 'celio', 'zara beige drawstring', "levi's 514", "levi's 512"
+    ]);
+    if (purgeResult.removedItemIds.length > 0) {
+      console.log('[wardrobe purge] removed items: ' + purgeResult.removedItemIds.join(', '));
+      console.log('[wardrobe purge] removed outfits: ' + purgeResult.removedOutfitIds.join(', '));
+    }
     const result = await dedupeWardrobeAndOutfits();
     if (result.mergedCount > 0) {
       console.log('[wardrobe dedupe] merged ' + result.mergedCount + ' duplicate item(s): ' + result.removedIds.join(', '));
+    }
+    if (purgeResult.removedItemIds.length > 0 || result.mergedCount > 0) {
       populateStats();
       renderWardrobe();
       buildDropdowns();
       updateVibeCounts();
       renderOutfits();
-      showBanner('Cleaned up ' + result.mergedCount + ' duplicate wardrobe item' + (result.mergedCount === 1 ? '' : 's') + '.', false);
+      const parts = [];
+      if (purgeResult.removedItemIds.length) parts.push('removed ' + purgeResult.removedItemIds.length + ' item(s) and ' + purgeResult.removedOutfitIds.length + ' outfit(s)');
+      if (result.mergedCount) parts.push('merged ' + result.mergedCount + ' duplicate(s)');
+      showBanner(parts.join(' · ') + '.', false);
     }
-  } catch(e) { console.log('dedupe pass failed', e); }
+  } catch(e) { console.log('cleanup pass failed', e); }
 });
 </script>
 </body>
