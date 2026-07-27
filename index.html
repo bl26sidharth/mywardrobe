@@ -79,6 +79,10 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
 .outfit:hover{transform:translate(-4px,-4px);box-shadow:0 1px 0 var(--line), 0 8px 24px rgba(0,0,0,0.4)}
 .outfit.rank-top::before{content:attr(data-rank);position:absolute;top:-12px;left:-12px;background:var(--gold);color:var(--paper);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:0.9rem;border:2px solid var(--ink);z-index:5;box-shadow:0 2px 8px rgba(0,0,0,0.25)}
 .outfit-head{padding:1rem 1.2rem 0.8rem;border-bottom:1px solid var(--line);position:relative}
+.outfit-delete{position:absolute;top:0.6rem;right:0.7rem;background:none;border:none;font-size:1.3rem;line-height:1;color:var(--ink-mute);cursor:pointer;padding:0.1rem 0.4rem;border-radius:3px}
+.outfit-delete:hover{color:#c0392b;background:rgba(192,57,43,0.1)}
+.trash-list .outfit-delete{display:none}
+.trash-restore{position:absolute;top:0.5rem;right:0.6rem;background:var(--ink);color:var(--bg);border:none;font-size:0.7rem;letter-spacing:0.05em;padding:0.35rem 0.7rem;border-radius:3px;cursor:pointer;text-transform:uppercase}
 .outfit-vibes{display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.4rem;align-items:center}
 .outfit-vibe-tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.18em;color:var(--ink-mute);display:inline-flex;align-items:center;gap:0.35rem}
 .outfit-vibe-tag .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
@@ -248,11 +252,13 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
       </select>
     </div>
     <button class="reset-btn" id="reset-filters">Reset</button>
+    <button class="reset-btn" id="trash-toggle" onclick="toggleTrash()">Trash (<span id="trash-count">0</span>)</button>
   </div>
   
   <div class="results-meta" id="results-meta">Showing <strong id="results-count">0</strong> outfits</div>
   <div class="outfits" id="outfits-grid"></div>
   <div class="empty" id="empty" style="display:none">No outfits match — try a different combination.</div>
+  <div class="outfits trash-list" id="trash-grid" style="display:none"></div>
 </section>
 
 <section class="view" id="view-wardrobe">
@@ -640,6 +646,7 @@ function buildCard(o, idx) {
         </div>
         <div class="outfit-title">${o.title}</div>
         <div class="outfit-occasion">${o.occasion}</div>
+        <button class="outfit-delete" title="Delete outfit" onclick="event.stopPropagation(); deleteOutfit('${o.id}')">&times;</button>
       </div>
       <div class="outfit-items ${itemCount}">${itemsHtml}</div>
       <div class="outfit-accessories">${accessoryHtml}</div>
@@ -650,6 +657,7 @@ function buildCard(o, idx) {
 // === Render outfits ===
 function renderOutfits() {
   let filtered = DATA.outfits.filter(o => {
+    if (DATA.deletedIds && DATA.deletedIds.has(o.id)) return false;
     if (state.vibe !== 'all' && !o.vibes.includes(state.vibe)) return false;
     if (state.top !== 'all' && o.top !== state.top) return false;
     if (state.pants !== 'all' && o.bottom !== state.pants) return false;
@@ -674,13 +682,67 @@ function renderOutfits() {
   }
   
   $('#results-count').textContent = filtered.length;
+  const trashCountEl = document.getElementById('trash-count');
+  if (trashCountEl) trashCountEl.textContent = DATA.deletedIds ? DATA.deletedIds.size : 0;
+}
+
+// === Delete / restore outfits (persisted via odel_ keys so it syncs across devices) ===
+function deleteOutfit(id) {
+  if (!DATA.deletedIds) DATA.deletedIds = new Set();
+  DATA.deletedIds.add(id);
+  window.storage.set('odel_' + id, '1').catch(e => console.log('[wardrobe sync] failed to persist delete for', id, e));
+  populateStats();
+  updateVibeCounts();
+  renderOutfits();
+  renderTrash();
+}
+
+function restoreOutfit(id) {
+  if (DATA.deletedIds) DATA.deletedIds.delete(id);
+  window.storage.delete('odel_' + id).catch(e => console.log('[wardrobe sync] failed to persist restore for', id, e));
+  populateStats();
+  updateVibeCounts();
+  renderOutfits();
+  renderTrash();
+}
+
+function toggleTrash() {
+  const grid = document.getElementById('outfits-grid');
+  const trash = document.getElementById('trash-grid');
+  const empty = document.getElementById('empty');
+  const showingTrash = trash.style.display !== 'none';
+  if (showingTrash) {
+    trash.style.display = 'none';
+    grid.style.display = '';
+    if (DATA.outfits.filter(o => !(DATA.deletedIds && DATA.deletedIds.has(o.id))).length === 0) empty.style.display = 'block';
+  } else {
+    trash.style.display = '';
+    grid.style.display = 'none';
+    empty.style.display = 'none';
+    renderTrash();
+  }
+}
+
+function renderTrash() {
+  const trash = document.getElementById('trash-grid');
+  if (!trash) return;
+  const deleted = DATA.outfits.filter(o => DATA.deletedIds && DATA.deletedIds.has(o.id));
+  if (deleted.length === 0) {
+    trash.innerHTML = '<p style="color:#8a8a90">Nothing in the trash.</p>';
+    return;
+  }
+  trash.innerHTML = deleted.map(o => {
+    const card = buildCard(o, null);
+    return card.replace('<div class="outfit-head">', `<div class="outfit-head"><button class="trash-restore" onclick="restoreOutfit('${o.id}')">Restore</button>`);
+  }).join('');
 }
 
 // === Update vibe counts ===
 function updateVibeCounts() {
-  $('#ct-all').textContent = DATA.outfits.length;
+  const activeOutfits = DATA.outfits.filter(o => !(DATA.deletedIds && DATA.deletedIds.has(o.id)));
+  $('#ct-all').textContent = activeOutfits.length;
   for (const v of VIBE_ORDER) {
-    const ct = DATA.outfits.filter(o => o.vibes.includes(v)).length;
+    const ct = activeOutfits.filter(o => o.vibes.includes(v)).length;
     const el = $('#ct-' + v);
     if (el) el.textContent = ct;
   }
@@ -694,7 +756,7 @@ function populateStats() {
     if (counts.hasOwnProperty(v.type)) counts[v.type]++;
   }
   const pieces = counts.tee + counts.polo + counts.shirt + counts.pants + counts.shoes;
-  document.getElementById('stat-outfits').textContent = DATA.outfits.length;
+  document.getElementById('stat-outfits').textContent = DATA.outfits.filter(o => !(DATA.deletedIds && DATA.deletedIds.has(o.id))).length;
   document.getElementById('stat-pieces').textContent = pieces;
   document.getElementById('stat-watches').textContent = counts.watch;
   document.getElementById('stat-socks').textContent = counts.socks;
@@ -1374,6 +1436,30 @@ async function loadPersistedItems() {
     }
   } catch(e) { console.log('outfit-patch storage unavailable', e); }
 
+  // Restore deleted-outfit ids (so a delete on one device is respected on others)
+  try {
+    let entries = await window.storage.getAllForPrefix('odel_');
+    if (!entries) {
+      const keys = await window.storage.list('odel_');
+      entries = [];
+      if (keys && keys.keys) {
+        for (const key of keys.keys) {
+          try { const r = await window.storage.get(key); if (r) entries.push(r); }
+          catch(e) { console.log('[wardrobe sync] failed to restore deletion', key, e); }
+        }
+      }
+    }
+    console.log('[wardrobe sync] odel_ entries found:', entries.length);
+    for (const r of entries) {
+      if (r.value === null || r.value === undefined) continue;
+      const outfitId = r.key.slice('odel_'.length);
+      if (!DATA.deletedIds.has(outfitId)) {
+        DATA.deletedIds.add(outfitId);
+        changed = true;
+      }
+    }
+  } catch(e) { console.log('outfit-deletion storage unavailable', e); }
+
   if (changed) {
     console.log('[wardrobe sync] change detected, re-rendering. Final outfit count:', DATA.outfits.length);
     populateStats();
@@ -1393,6 +1479,7 @@ async function loadPersistedItems() {
 // to the right outfit on the next load, even though the object itself is
 // rebuilt fresh from this file every time the page opens.
 DATA.outfits.forEach((o, i) => { if (!o.id) o.id = 'base' + i; });
+DATA.deletedIds = new Set();
 buildDropdowns();
 populateStats();
 renderWardrobe();
