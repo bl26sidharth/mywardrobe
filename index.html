@@ -1047,29 +1047,70 @@ Respond ONLY with valid JSON, no markdown:
     const p = extractJSON(text);
 
     const batchStamp = Date.now().toString(36);
-    addState.outfits = (p.outfits || []).map((o, i) => ({
-      ...o,
-      id: 'new_' + batchStamp + '_' + i,
-      base: isOuterLayer ? (o.base || null) : undefined,
-      score_breakdown: { color: o.score, silhouette: o.score, versatility: o.score, sophistication: o.score },
-      sunglasses: 'sun_round_orange',
-      socks: 'socks_skechers_white',
-      socks_visible: false,
-      watch: 'watch_tommy_tan',
-    }));
+
+    // A "signature" is the actual outfit combo (top+bottom+shoes+base),
+    // independent of title/score. Two outfits with the same signature ARE
+    // duplicates even if the AI gave them different names/scores — this is
+    // what was slipping through before.
+    const signature = (o) => [o.top, o.bottom, o.shoes, o.base || ''].join('|');
+
+    // Every outfit that will still exist once this batch is applied, other
+    // than the ones actually being reworked (their combo is about to change,
+    // so their OLD signature shouldn't block anything).
+    const existingSignatures = new Set(
+      DATA.outfits.filter(o => !rework.includes(o)).map(signature)
+    );
+    const reworkedIndices = new Set((p.updates || []).map(u => u.index));
+    rework.forEach((o, i) => { if (!reworkedIndices.has(i)) existingSignatures.add(signature(o)); });
+
+    const seenThisBatch = new Set();
+    let droppedDupeUpdates = 0, droppedDupeOutfits = 0;
 
     // Stage reworks as {ref, baseId, before, after} — ref points at the *actual*
     // outfit object already living in DATA.outfits (so applying later just
     // mutates it in place), while baseId is what gets saved to storage so the
     // same patch can be found and re-applied to that outfit on the next load.
+    // Drop any rework whose resulting combo duplicates something that will
+    // already exist, or duplicates another rework/new-outfit in this same batch.
     addState.updates = (p.updates || [])
       .filter(u => rework[u.index])
+      .filter(u => {
+        const sig = signature(u);
+        if (existingSignatures.has(sig) || seenThisBatch.has(sig)) { droppedDupeUpdates++; return false; }
+        seenThisBatch.add(sig);
+        return true;
+      })
       .map(u => ({
         ref: rework[u.index],
         baseId: rework[u.index].id,
         before: { title: rework[u.index].title, score: rework[u.index].score },
         after: u,
       }));
+
+    // Same dedup pass for brand-new outfits, checked against existing combos
+    // AND against whatever reworks/new-outfits already claimed a signature
+    // above, so two new outfits in the same batch can't collide either.
+    addState.outfits = (p.outfits || [])
+      .filter(o => {
+        const sig = signature(o);
+        if (existingSignatures.has(sig) || seenThisBatch.has(sig)) { droppedDupeOutfits++; return false; }
+        seenThisBatch.add(sig);
+        return true;
+      })
+      .map((o, i) => ({
+        ...o,
+        id: 'new_' + batchStamp + '_' + i,
+        base: isOuterLayer ? (o.base || null) : undefined,
+        score_breakdown: { color: o.score, silhouette: o.score, versatility: o.score, sophistication: o.score },
+        sunglasses: 'sun_round_orange',
+        socks: 'socks_skechers_white',
+        socks_visible: false,
+        watch: 'watch_tommy_tan',
+      }));
+
+    if (droppedDupeUpdates || droppedDupeOutfits) {
+      console.log('[wardrobe dedup] dropped', droppedDupeOutfits, 'duplicate new outfit(s) and', droppedDupeUpdates, 'duplicate rework(s) — same top/bottom/shoes combo already existed.');
+    }
 
     const newHtml = addState.outfits.map(o => {
       const tl = DATA.wardrobe[o.top]?.label   || o.top;
@@ -1101,8 +1142,15 @@ Respond ONLY with valid JSON, no markdown:
     if (addState.updates.length) {
       heading = `<h3 style="margin-top:1rem">Existing outfits reworked with this piece</h3>`;
     }
+    let dedupeNote = '';
+    if (droppedDupeUpdates || droppedDupeOutfits) {
+      const parts = [];
+      if (droppedDupeOutfits) parts.push(droppedDupeOutfits + ' duplicate new outfit' + (droppedDupeOutfits > 1 ? 's' : ''));
+      if (droppedDupeUpdates) parts.push(droppedDupeUpdates + ' duplicate rework' + (droppedDupeUpdates > 1 ? 's' : ''));
+      dedupeNote = `<p style="color:#8a8a90;font-size:0.8rem;margin-top:0.5rem">Filtered out ${parts.join(' and ')} that matched an outfit combo already in your wardrobe.</p>`;
+    }
 
-    document.getElementById('add-outfits-list').innerHTML = newHtml + heading + updateHtml;
+    document.getElementById('add-outfits-list').innerHTML = newHtml + heading + updateHtml + dedupeNote;
     document.getElementById('add-outfits').classList.add('on');
   } catch(err) {
     console.error('outfit gen error:', err);
