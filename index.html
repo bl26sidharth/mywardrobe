@@ -103,8 +103,6 @@ section.view.active{display:block;animation:fadeIn 0.4s ease forwards}
 .accessory-tag strong{color:var(--ink);font-weight:500;text-transform:none;letter-spacing:0;font-family:'Public Sans',sans-serif;font-size:0.72rem}
 .accessory-tag .accessory-img{width:24px;height:24px;background-size:cover;background-position:center;border:1px solid var(--line);border-radius:50%}
 
-.outfit-notes{padding:0.9rem 1.2rem;border-top:1px solid var(--line);font-size:0.8rem;color:var(--ink-soft);line-height:1.5;font-weight:300;background:linear-gradient(to bottom, transparent, var(--bg))}
-.outfit-notes::before{content:'NOTE — ';font-family:'JetBrains Mono',monospace;font-size:0.58rem;letter-spacing:0.18em;color:var(--ink-mute);font-weight:500}
 .empty{padding:3rem;text-align:center;font-family:'Fraunces',serif;font-style:italic;color:var(--ink-mute);font-size:1.2rem}
 
 .wardrobe-group{margin-bottom:3rem}
@@ -645,7 +643,6 @@ function buildCard(o, idx) {
       </div>
       <div class="outfit-items ${itemCount}">${itemsHtml}</div>
       <div class="outfit-accessories">${accessoryHtml}</div>
-      <div class="outfit-notes">${o.notes}</div>
     </div>
   `;
 }
