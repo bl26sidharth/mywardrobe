@@ -478,8 +478,17 @@ if (!window.storage) {
         const res = await fetch(STORAGE_API + '?prefix=' + encodeURIComponent(prefix) + '&withValues=1');
         if (!res.ok) throw new Error('storage batch GET failed: ' + res.status);
         const data = await res.json();
+        // If the deployed proxy is still the old storage.js, it ignores
+        // withValues=1 and returns only {keys}, no `values` field at all.
+        // That's NOT the same as "no data" — treat it as "batching isn't
+        // supported by this deployment yet" and fall back to the slow path,
+        // instead of silently proceeding with every value undefined.
+        if (!data || data.values === undefined) {
+          console.log('[wardrobe sync] proxy returned no values field for', prefix, '— old storage.js still deployed? falling back to per-key fetch.');
+          return null;
+        }
         const keys = data.keys || [];
-        const values = data.values || [];
+        const values = data.values;
         const out = keys.map((k, i) => ({ key: k, value: values[i] }));
         out.forEach(r => { if (r.value !== null) { try { localStorage.setItem(r.key, r.value); } catch(e){} } });
         return out;
@@ -1204,7 +1213,7 @@ async function loadPersistedItems() {
     console.log('[wardrobe sync] wi_ entries found:', entries.length);
     for (const r of entries) {
       try {
-        if (r.value === null || r.value === undefined) continue;
+        if (r.value === null || r.value === undefined) { console.log('[wardrobe sync] skipping entry with missing value:', r.key); continue; }
         const item = parseStoredValue(r.value);
         if (item.id && !DATA.wardrobe[item.id]) {
           DATA.wardrobe[item.id] = { label: item.label, type: item.type };
@@ -1233,7 +1242,7 @@ async function loadPersistedItems() {
     let pushed = 0, skippedDupe = 0, skippedNoId = 0;
     for (const r of entries) {
       try {
-        if (r.value === null || r.value === undefined) continue;
+        if (r.value === null || r.value === undefined) { console.log('[wardrobe sync] skipping entry with missing value:', r.key); continue; }
         const outfit = parseStoredValue(r.value);
         if (!outfit.id) { skippedNoId++; continue; }
         if (existingIds.has(outfit.id)) { skippedDupe++; continue; }
@@ -1264,7 +1273,7 @@ async function loadPersistedItems() {
     DATA.outfits.forEach(o => { if (o.id) byId[o.id] = o; });
     for (const r of entries) {
       try {
-        if (r.value === null || r.value === undefined) continue;
+        if (r.value === null || r.value === undefined) { console.log('[wardrobe sync] skipping entry with missing value:', r.key); continue; }
         const patch = parseStoredValue(r.value);
         const baseId = r.key.slice('opatch_'.length);
         const target = byId[baseId];
